@@ -254,6 +254,11 @@
                 <div class="quality-grid" id="qualityGrid"></div>
             </div>
             
+            <div id="audioSection" style="display: none;">
+                <h3 style="margin-bottom: 15px; color: #2d3748;">🎵 Audio Only:</h3>
+                <div class="quality-grid" id="audioGrid"></div>
+            </div>
+            
             <button class="download-btn" id="downloadBtn" onclick="startDownload()" disabled>
                 <span>⬇️ Download karo</span>
                 <span style="font-size: 0.9rem;" id="downloadNote"></span>
@@ -264,18 +269,42 @@
         
         <div class="footer">
             <p>⚡ <strong>FFmpeg active</strong> • Video aur audio automatically merge honge • Ek file mein sab kuch</p>
-            <p style="font-size: 0.8rem; margin-top: 10px;">Linux pe test kiya • Published with 💚</p>
+            <p style="font-size: 0.8rem; margin-top: 10px;">Linux pe test kiya • Published with ❤️</p>
         </div>
     </div>
     
     <script>
+        // 🔥 RENDER URL - यहाँ अपना Render URL डालो
+        const RENDER_URL = 'https://yt-downloader.onrender.com';
+        
         let currentVideoTitle = '';
         let selectedFormat = null;
+        let videoData = null;
+        let audioFormats = [];
         
         function showStatus(message, type) {
             const status = document.getElementById('status');
             status.textContent = message;
             status.className = `status show ${type}`;
+            setTimeout(() => {
+                status.classList.remove('show');
+            }, 5000);
+        }
+        
+        function formatDuration(seconds) {
+            if (!seconds) return '--:--';
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = seconds % 60;
+            if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        }
+        
+        function formatFileSize(bytes) {
+            if (!bytes || bytes === 0) return 'Unknown';
+            const mb = bytes / (1024 * 1024);
+            if (mb < 1000) return `${mb.toFixed(1)} MB`;
+            return `${(mb / 1024).toFixed(1)} GB`;
         }
         
         async function processVideo() {
@@ -288,14 +317,18 @@
             }
             
             processBtn.disabled = true;
-            processBtn.textContent = '⏳ Processing...';
+            processBtn.innerHTML = '<span class="spinner"></span> Processing...';
             
             try {
-                const response = await fetch('http://localhost:3000/api/info', {
+                const response = await fetch(`${RENDER_URL}/api/info`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url })
                 });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 
                 const data = await response.json();
                 
@@ -304,15 +337,27 @@
                     return;
                 }
                 
-                // Video info show karo
+                videoData = data;
                 currentVideoTitle = data.title;
+                
                 document.getElementById('videoTitle').textContent = data.title;
                 document.getElementById('videoDuration').textContent = `⏱ ${formatDuration(data.duration)}`;
                 document.getElementById('videoUploader').textContent = `👤 ${data.uploader || 'Unknown'}`;
                 document.getElementById('videoInfo').classList.add('show');
                 
-                // Available formats show karo
-                showFormats(data.formats);
+                const videoFormats = [];
+                audioFormats = [];
+                
+                data.formats.forEach(f => {
+                    if (f.hasVideo && f.hasAudio) {
+                        videoFormats.push(f);
+                    } else if (f.hasAudio && !f.hasVideo) {
+                        audioFormats.push(f);
+                    }
+                });
+                
+                showVideoQualities(videoFormats);
+                showAudioQualities(audioFormats);
                 
                 showStatus('✅ Video mil gaya! Quality chuno', 'success');
                 
@@ -321,80 +366,96 @@
                 console.error(error);
             } finally {
                 processBtn.disabled = false;
-                processBtn.textContent = '🔍 Process';
+                processBtn.innerHTML = '🔍 Process';
             }
         }
         
-        function formatDuration(seconds) {
-            if (!seconds) return '--:--';
-            const h = Math.floor(seconds / 3600);
-            const m = Math.floor((seconds % 3600) / 60);
-            const s = seconds % 60;
-            
-            if (h > 0) {
-                return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-            }
-            return `${m}:${s.toString().padStart(2, '0')}`;
-        }
-        
-        function formatFileSize(bytes) {
-            if (!bytes || bytes === 0) return 'Unknown size';
-            const mb = bytes / (1024 * 1024);
-            if (mb < 1000) return `${mb.toFixed(1)} MB`;
-            return `${(mb / 1024).toFixed(1)} GB`;
-        }
-        
-        function showFormats(formats) {
+        function showVideoQualities(formats) {
             const grid = document.getElementById('qualityGrid');
-            const qualitySection = document.getElementById('qualitySection');
+            const section = document.getElementById('qualitySection');
             
             grid.innerHTML = '';
             
-            if (!formats || formats.length === 0) {
-                qualitySection.style.display = 'none';
+            if (formats.length === 0) {
+                section.style.display = 'none';
                 return;
             }
             
-            formats.forEach((format, index) => {
+            const resolutions = ['1080', '720', '480', '360', '240', '144'];
+            const sortedFormats = [];
+            
+            resolutions.forEach(res => {
+                const match = formats.find(f => f.resolution && f.resolution.includes(res));
+                if (match) sortedFormats.push(match);
+            });
+            
+            formats.forEach(f => {
+                if (!sortedFormats.includes(f)) sortedFormats.push(f);
+            });
+            
+            sortedFormats.slice(0, 6).forEach(format => {
                 const btn = document.createElement('div');
                 btn.className = 'quality-btn';
                 
-                let resolution = format.resolution || 'Unknown';
-                let qualityText = format.quality || 'Standard';
-                
-                if (format.hasVideo && format.hasAudio) {
-                    resolution += ' 🔥 Video+Audio';
-                } else if (format.hasVideo && !format.hasAudio) {
-                    resolution += ' 🎬 Video only';
-                } else if (!format.hasVideo && format.hasAudio) {
-                    resolution = '🎵 Audio Only';
-                    qualityText = 'Best Audio';
-                }
+                const resolution = format.resolution || 'SD';
+                const size = format.filesize ? formatFileSize(format.filesize) : 'Variable';
                 
                 btn.innerHTML = `
                     <div class="quality-resolution">${resolution}</div>
-                    <div class="quality-size">${qualityText} • ${formatFileSize(format.filesize)}</div>
+                    <div class="quality-size">${size}</div>
                 `;
                 
                 btn.onclick = () => {
-                    document.querySelectorAll('.quality-btn').forEach(b => b.classList.remove('selected'));
+                    document.querySelectorAll('#qualityGrid .quality-btn').forEach(b => b.classList.remove('selected'));
                     btn.classList.add('selected');
                     selectedFormat = format;
                     
-                    const downloadBtn = document.getElementById('downloadBtn');
-                    downloadBtn.disabled = false;
-                    
-                    if (format.hasVideo && format.hasAudio) {
-                        document.getElementById('downloadNote').textContent = '(Already merged)';
-                    } else {
-                        document.getElementById('downloadNote').textContent = '(FFmpeg merge karega)';
-                    }
+                    document.getElementById('downloadBtn').disabled = false;
+                    document.getElementById('downloadNote').textContent = '(Video+Audio)';
                 };
                 
                 grid.appendChild(btn);
             });
             
-            qualitySection.style.display = 'block';
+            section.style.display = 'block';
+        }
+        
+        function showAudioQualities(formats) {
+            const grid = document.getElementById('audioGrid');
+            const section = document.getElementById('audioSection');
+            
+            grid.innerHTML = '';
+            
+            if (formats.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+            
+            formats.slice(0, 3).forEach(format => {
+                const btn = document.createElement('div');
+                btn.className = 'quality-btn';
+                
+                const bitrate = format.quality || 'Audio';
+                const size = format.filesize ? formatFileSize(format.filesize) : '~5 MB';
+                
+                btn.innerHTML = `
+                    <div class="quality-resolution">🎵 ${bitrate}</div>
+                    <div class="quality-size">${size}</div>
+                `;
+                
+                btn.onclick = () => {
+                    document.querySelectorAll('#audioGrid .quality-btn').forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                    selectedFormat = format;
+                    
+                    document.getElementById('downloadBtn').disabled = false;
+                    document.getElementById('downloadNote').textContent = '(Audio Only)';
+                };
+                
+                grid.appendChild(btn);
+            });
+            
+            section.style.display = 'block';
         }
         
         async function startDownload() {
@@ -405,12 +466,12 @@
             
             const downloadBtn = document.getElementById('downloadBtn');
             downloadBtn.disabled = true;
-            downloadBtn.innerHTML = '<span>⏳ Downloading...</span><span>FFmpeg merge kar raha hai...</span>';
+            downloadBtn.innerHTML = '<span>⏳ Downloading...</span>';
             
-            showStatus('⏳ Video download ho raha hai... FFmpeg audio+video merge karega', 'info');
+            showStatus('⏳ Video download ho raha hai... FFmpeg merge karega', 'info');
             
             try {
-                const response = await fetch('http://localhost:3000/api/download', {
+                const response = await fetch(`${RENDER_URL}/api/download`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -426,9 +487,7 @@
                     showStatus('❌ ' + data.error, 'error');
                 } else if (data.file) {
                     showStatus('✅ Download complete! File download ho rahi hai...', 'success');
-                    
-                    // File download karo
-                    window.location.href = `http://localhost:3000/api/file/${encodeURIComponent(data.file)}`;
+                    window.location.href = `${RENDER_URL}/api/file/${encodeURIComponent(data.file)}`;
                 } else {
                     showStatus('✅ ' + data.message, 'success');
                 }
@@ -438,7 +497,7 @@
                 console.error(error);
             } finally {
                 downloadBtn.disabled = false;
-                downloadBtn.innerHTML = '<span>⬇️ Download karo</span><span id="downloadNote"></span>';
+                downloadBtn.innerHTML = '⬇️ Download karo';
             }
         }
     </script>
