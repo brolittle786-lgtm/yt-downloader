@@ -14,6 +14,7 @@ if (!fs.existsSync(downloadsDir)) {
     fs.mkdirSync(downloadsDir);
 }
 
+// ==================== VIDEO INFO API ====================
 app.post('/api/info', (req, res) => {
     const { url } = req.body;
     
@@ -59,6 +60,7 @@ app.post('/api/info', (req, res) => {
     });
 });
 
+// ==================== DOWNLOAD API ====================
 app.post('/api/download', (req, res) => {
     const { url, format_id, title } = req.body;
     
@@ -103,6 +105,7 @@ app.post('/api/download', (req, res) => {
     });
 });
 
+// ==================== FILE DOWNLOAD API ====================
 app.get('/api/file/:filename', (req, res) => {
     const filename = req.params.filename;
     const filepath = path.join(downloadsDir, filename);
@@ -122,10 +125,12 @@ app.get('/api/file/:filename', (req, res) => {
     }
 });
 
+// ==================== ROOT ROUTE ====================
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
+// ==================== SERVER START ====================
 const port = process.env.PORT || 3000;
 app.listen(port, '0.0.0.0', () => {
     console.log(`🚀 Server running on port ${port}`);
